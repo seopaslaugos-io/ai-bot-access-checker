@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ai-bot-access-checker": {
+      "type": "http",
+      "url": "https://tools.seopaslaugos.io/mcp"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+name = "ai-bot-access-checker"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = false
+
+routes = [{ pattern = "tools.seopaslaugos.io", custom_domain = true }]
+
+# 20 checks per minute per IP (each check makes ~13 requests to the target site).
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
+[observability]
+enabled = true
