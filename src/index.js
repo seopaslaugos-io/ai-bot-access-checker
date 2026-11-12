@@ -5,7 +5,7 @@ export { HostLimit } from './hostlimit.js';
 
 const TARGET_LIMIT = 6; // fresh checks per checked host per minute, all callers together
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const DOCS = 'https://seopaslaugos.io/en/tools/ai-bot-access-checker';
 const CACHE_SECONDS = 600;
 

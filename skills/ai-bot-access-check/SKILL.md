@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: Mantas Tamošaitis
   homepage: https://seopaslaugos.io/en/tools/ai-bot-access-checker
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # AI bot access check
@@ -32,21 +32,23 @@ Each bot gets one `access` value:
 | access | Meaning | What to tell the user |
 |---|---|---|
 | `allowed` | robots.txt allows it and the server answers it like a browser | Nothing to fix for this bot |
-| `blocked_by_robots` | A Disallow rule applies; `robots.rule` and `robots.group` show which | Edit robots.txt if the block is not intended |
+| `blocked_by_robots` | A Disallow rule applies; `robots.rule` and `robots.group` show which | Edit robots.txt if the block is not intended. If `robots.vendorNote` is set (ChatGPT-User, Perplexity-User), say the vendor may still fetch the page |
 | `blocked_by_server` | robots.txt allows it, but the server or firewall refuses the User-Agent (403, 429, dropped connection, challenge/captcha page) | Fix it at the host/CDN: security rules (ModSecurity), rate limits, Cloudflare AI crawler settings. robots.txt changes will not help |
 | `inconclusive` | The firewall also refuses a fake Googlebot, so it verifies crawler IPs | Cannot be decided from outside: check the firewall's bot settings or logs, and URL Inspection in Search Console / Bing Webmaster Tools |
 | `suspicious` | HTTP 200 but a much smaller response than a browser gets | Open the page as that bot and look for a stripped or block page |
 | `page_error` | A normal browser fails too | The page itself is broken or blocks datacenter traffic |
 
+If `robots.source` is `cloudflare_managed`, the rule was added by Cloudflare's Managed robots.txt, not the site's file: tell the user to change it in the Cloudflare dashboard.
+
 Also report `baseline.noindex` when it is true: a noindex page is excluded from Google results regardless of bot access.
 
 ## Which bots matter for what
 
-- Citations in ChatGPT: OAI-SearchBot, ChatGPT-User, and bingbot (ChatGPT search leans on Bing).
+- Citations in ChatGPT: OAI-SearchBot (ChatGPT search). ChatGPT-User fetches pages live when a user asks; OpenAI says robots.txt may not apply to it.
 - Citations in Claude: Claude-SearchBot, Claude-User.
-- Citations in Perplexity: PerplexityBot, Perplexity-User.
+- Citations in Perplexity: PerplexityBot. Perplexity-User fetches live; Perplexity says it generally ignores robots.txt.
 - Google AI Overviews and AI Mode: Googlebot. Google-Extended only controls Gemini use and does not remove a site from Search.
-- Training only: GPTBot, ClaudeBot, CCBot, Applebot-Extended. Blocking these does not stop live citations.
+- Training only: GPTBot, ClaudeBot, CCBot, Google-Extended, Applebot-Extended. Blocking these does not stop search citations.
 
 ## Limits to state honestly
 

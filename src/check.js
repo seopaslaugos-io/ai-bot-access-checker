@@ -255,8 +255,9 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
       const row = {
         bot: b.token,
         vendor: b.vendor,
+        category: b.category,
         purpose: b.purpose,
-        robots: { allowed: robots.allowed, group: clean(robots.group, 60), rule: robots.tooComplex ? 'robots.txt too complex to evaluate fully' : clean(robots.rule, 120), source: robots.source ?? null },
+        robots: { allowed: robots.allowed, group: clean(robots.group, 60), rule: robots.tooComplex ? 'robots.txt too complex to evaluate fully' : clean(robots.rule, 120), source: robots.source ?? null, vendorNote: !robots.allowed && b.robots === 'may_not' ? b.robotsNote : null },
       };
       if (b.fetches === false) {
         row.server = { verdict: 'not_applicable', note: 'Control token only: it is set in robots.txt and never sent as a User-Agent.' };
@@ -333,7 +334,7 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
 export function toText(r) {
   const label = {
     allowed: 'ALLOWED',
-    blocked_by_robots: 'BLOCKED (robots.txt)',
+    blocked_by_robots: 'DISALLOWED (robots.txt)',
     blocked_by_server: 'BLOCKED (server/firewall)',
     suspicious: 'CHECK (odd response)',
     inconclusive: 'INCONCLUSIVE (firewall checks bot IPs)',
@@ -353,7 +354,7 @@ export function toText(r) {
   lines.push('');
   for (const b of r.bots) {
     let why = '';
-    if (b.access === 'blocked_by_robots') why = ` - ${b.robots.rule}${b.robots.group ? ` (group "${b.robots.group}")` : ''}${b.robots.source === 'cloudflare_managed' ? ' [added by Cloudflare]' : ''}`;
+    if (b.access === 'blocked_by_robots') why = ` - ${b.robots.rule}${b.robots.group ? ` (group "${b.robots.group}")` : ''}${b.robots.source === 'cloudflare_managed' ? ' [added by Cloudflare]' : ''}${b.robots.vendorNote ? ` NOTE: ${b.robots.vendorNote}` : ''}`;
     else if (b.access === 'inconclusive') why = ` - HTTP ${b.server.status}`;
     else if (b.server.verdict !== 'ok' && b.server.verdict !== 'not_applicable') why = ` - ${b.server.note}`;
     lines.push(`${b.bot.padEnd(18)} ${label[b.access] || b.access}${why}`);

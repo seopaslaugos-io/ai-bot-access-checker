@@ -19,16 +19,16 @@ robots.txt is only half of it. Shared-hosting security rules (ModSecurity), rate
 |---|---|---|
 | GPTBot | OpenAI | Training |
 | OAI-SearchBot | OpenAI | ChatGPT search index |
-| ChatGPT-User | OpenAI | Live visits when a user asks |
+| ChatGPT-User | OpenAI | Live visits when a user asks (OpenAI: robots.txt *may not apply*) |
 | ClaudeBot | Anthropic | Training |
 | Claude-SearchBot | Anthropic | Claude search index |
 | Claude-User | Anthropic | Live visits when a user asks |
 | PerplexityBot | Perplexity | Perplexity search index |
-| Perplexity-User | Perplexity | Live visits when a user asks |
+| Perplexity-User | Perplexity | Live visits when a user asks (Perplexity: *generally ignores* robots.txt) |
 | Googlebot | Google | Google Search, AI Overviews, AI Mode |
-| Google-Extended | Google | Gemini opt-out (robots.txt token only) |
-| bingbot | Microsoft | Bing, Copilot, and ChatGPT search via Bing |
-| Applebot-Extended | Apple | Apple Intelligence opt-out (robots.txt token only) |
+| Google-Extended | Google | Gemini training opt-out (robots.txt token only; no effect on Search) |
+| bingbot | Microsoft | Bing search index |
+| Applebot-Extended | Apple | Apple model training opt-out (robots.txt token only; no effect on Apple search) |
 | CCBot | Common Crawl | Open training corpus |
 
 ## Use it
@@ -71,7 +71,7 @@ Copy `skills/ai-bot-access-check` into your agent's skills folder, or install it
 | `access` | Meaning |
 |---|---|
 | `allowed` | robots.txt allows it and the server answers it like a browser |
-| `blocked_by_robots` | A Disallow rule applies (rule and user-agent group included) |
+| `blocked_by_robots` | A Disallow rule applies (rule and user-agent group included). For ChatGPT-User and Perplexity-User the vendors say robots.txt may be ignored; `robots.vendorNote` says so |
 | `blocked_by_server` | robots.txt allows it, the server refuses the User-Agent: 403, 429, dropped connection, challenge or captcha page |
 | `inconclusive` | The firewall refuses a fake Googlebot too, so it checks crawler IPs; the real crawler may get in |
 | `suspicious` | HTTP 200 but under a fifth of the browser's response size |
