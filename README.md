@@ -62,6 +62,14 @@ Googlebot          ALLOWED
 }
 ```
 
+### Hermes Agent
+
+```bash
+hermes plugins install ai-bot-access-checker
+```
+
+The package is an [Agent Plugins](https://agent-plugins.org) v1 bundle: `plugin.json`, `mcp.json` (remote Streamable HTTP server, no keys, no local process) and the skill in `skills/`. The one tool is read-only; it sends HTTP requests to the URL you ask it to check, from `tools.seopaslaugos.io`.
+
 ### Agent skill
 
 Copy `skills/ai-bot-access-check` into your agent's skills folder, or install it from ClawHub. The skill calls the REST API with curl, so it needs no MCP support.

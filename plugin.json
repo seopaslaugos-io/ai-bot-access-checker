@@ -1,12 +1,11 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "ai-bot-access-checker",
   "version": "1.3.0",
-  "description": "Check whether GPTBot, ClaudeBot, PerplexityBot, Googlebot and 9 more AI and search crawlers can reach a page: robots.txt rules plus server and firewall blocks.",
+  "description": "Check whether GPTBot, ClaudeBot, PerplexityBot, Googlebot and 9 more AI and search crawlers can reach a page: the robots.txt rule for each, and whether the server or firewall blocks it.",
   "author": { "name": "Mantas Tamošaitis", "url": "https://seopaslaugos.io/en" },
   "homepage": "https://seopaslaugos.io/en/tools/ai-bot-access-checker",
   "repository": "https://github.com/seopaslaugos-io/ai-bot-access-checker",
   "license": "MIT",
-  "keywords": ["seo", "robots.txt", "ai-crawlers", "gptbot", "claudebot", "perplexitybot", "geo", "ai-search"],
-  "mcpServers": "./mcp.json",
-  "skills": ["./skills/ai-bot-access-check"]
+  "keywords": ["seo", "robots-txt", "ai-crawlers", "gptbot", "claudebot", "perplexitybot", "geo", "ai-search", "mcp"]
 }
