@@ -1,5 +1,5 @@
 import { BOTS, BROWSER_UA } from './bots.js';
-import { checkRobots } from './robots.js';
+import { checkParsed, parseRobots } from './robots.js';
 
 const TIMEOUT_MS = 10000;
 const BODY_LIMIT = 65536;
@@ -20,28 +20,62 @@ const BLOCK_MARKERS = [
 
 export class InputError extends Error {}
 
+const MAX_URL_LENGTH = 2048;
+const MAX_REDIRECTS = 5;
+// Our own hosts: checking them through the checker would make it call itself.
+const OWN_HOSTS = ['tools.seopaslaugos.io', 'workers.dev'];
+// Hostnames that resolve to private or loopback addresses on purpose (wildcard DNS services).
+const REBIND_SUFFIXES = ['nip.io', 'sslip.io', 'xip.io', 'localtest.me', 'lvh.me', 'traefik.me', 'localhost.run'];
+const RESERVED_TLDS = ['localhost', 'local', 'internal', 'intranet', 'lan', 'home', 'corp', 'test', 'invalid', 'example', 'onion', 'arpa'];
+
+// Throws InputError unless `u` is a public http(s) URL on a default port with a domain name.
+// Used for the input and again for every redirect hop.
+export function assertPublicUrl(u) {
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new InputError('Only http and https URLs can be checked.');
+  if (u.username || u.password) throw new InputError('URLs with credentials are not accepted.');
+  if (u.port && u.port !== '80' && u.port !== '443') throw new InputError('Only the default ports 80 and 443 are checked.');
+  const h = u.hostname.toLowerCase().replace(/\.$/, '');
+  const labels = h.split('.');
+  const tld = labels[labels.length - 1];
+  if (
+    h.includes(':') || h.startsWith('[') || // IPv6 literal
+    labels.length < 2 ||
+    labels.every(l => /^(0x[0-9a-f]*|[0-9]+)$/i.test(l)) || // dotted, decimal, octal or hex IPv4
+    /^[0-9]+$/.test(tld) ||
+    RESERVED_TLDS.includes(tld) ||
+    REBIND_SUFFIXES.some(s => h === s || h.endsWith('.' + s))
+  ) {
+    throw new InputError('Give a public domain name, not an IP address or local host.');
+  }
+  if (OWN_HOSTS.some(s => h === s || h.endsWith('.' + s))) {
+    throw new InputError('The checker cannot check its own API.');
+  }
+}
+
 export function normaliseUrl(input) {
-  let raw = String(input || '').trim();
+  let raw = String(input ?? '').trim();
   if (!raw) throw new InputError('Give a URL, for example https://example.com/');
+  if (raw.length > MAX_URL_LENGTH) throw new InputError(`URL is longer than ${MAX_URL_LENGTH} characters.`);
+  if (/[\u0000-\u001f\u007f\s]/.test(raw)) throw new InputError('URL contains spaces or control characters.');
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'https://' + raw;
   let u;
   try {
     u = new URL(raw);
   } catch {
-    throw new InputError(`Not a valid URL: ${input}`);
+    throw new InputError('Not a valid URL.');
   }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new InputError('Only http and https URLs can be checked.');
-  if (u.username || u.password) throw new InputError('URLs with credentials are not accepted.');
-  if (u.port && u.port !== '80' && u.port !== '443') throw new InputError('Only the default ports 80 and 443 are checked.');
-  const h = u.hostname.toLowerCase();
-  if (
-    h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') ||
-    /^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(':') || !h.includes('.')
-  ) {
-    throw new InputError('Give a public domain name, not an IP address or local host.');
-  }
+  assertPublicUrl(u);
   u.hash = '';
   return u;
+}
+
+// Text that came from the checked site (robots.txt lines, URLs) is shown to people and to AI
+// agents. Strip control characters and cap the length so a site cannot smuggle long
+// instructions or fake output lines into the result.
+export function clean(s, max = 120) {
+  if (s == null) return s;
+  const t = String(s).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ').trim();
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
 }
 
 async function readLimited(res) {
@@ -70,20 +104,40 @@ async function readLimited(res) {
   return new TextDecoder('utf-8', { fatal: false }).decode(buf);
 }
 
-async function probe(url, ua) {
-  const started = Date.now();
-  try {
-    const res = await fetch(url.toString(), {
+// Follows redirects by hand so every hop is checked with assertPublicUrl: a public site
+// cannot bounce the checker to an internal address, a non-default port or our own API.
+export async function fetchChecked(url, ua, signal) {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const res = await fetch(current.toString(), {
       method: 'GET',
-      redirect: 'follow',
+      redirect: 'manual',
       headers: {
         'User-Agent': ua,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en,lt;q=0.8',
       },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal,
       cf: { cacheTtl: 0, cacheEverything: false },
     });
+    const loc = res.headers.get('location');
+    if (res.status >= 300 && res.status < 400 && loc) {
+      try { await res.body?.cancel(); } catch {}
+      let next;
+      try { next = new URL(loc, current); } catch { throw new Error('invalid redirect'); }
+      try { assertPublicUrl(next); } catch { throw new Error('redirect to a non-public address was not followed'); }
+      current = next;
+      continue;
+    }
+    return { res, finalUrl: current.toString() };
+  }
+  throw new Error(`more than ${MAX_REDIRECTS} redirects`);
+}
+
+async function probe(url, ua) {
+  const started = Date.now();
+  try {
+    const { res, finalUrl } = await fetchChecked(url, ua, AbortSignal.timeout(TIMEOUT_MS));
     const body = await readLimited(res);
     let marker = null;
     for (const [re, label] of BLOCK_MARKERS) {
@@ -92,16 +146,16 @@ async function probe(url, ua) {
     if (!marker && res.headers.get('cf-mitigated') === 'challenge') marker = 'Cloudflare challenge page';
     return {
       status: res.status,
-      finalUrl: res.url,
+      finalUrl: clean(finalUrl, 300),
       bytes: body.length,
       marker,
-      xRobotsTag: res.headers.get('x-robots-tag'),
+      xRobotsTag: clean(res.headers.get('x-robots-tag'), 120),
       ms: Date.now() - started,
       body,
     };
   } catch (e) {
     const timeout = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
-    return { status: 0, error: timeout ? `No answer within ${TIMEOUT_MS / 1000} s` : `Connection failed (${e?.message || e})`, ms: Date.now() - started };
+    return { status: 0, error: timeout ? `No answer within ${TIMEOUT_MS / 1000} s` : `Connection failed (${clean(e?.message || e, 100)})`, ms: Date.now() - started };
   }
 }
 
@@ -114,7 +168,7 @@ function metaRobots(body) {
     const name = /name\s*=\s*["']?([^"'\s>]+)/i.exec(tag)?.[1]?.toLowerCase();
     if (name !== 'robots') continue;
     const content = /content\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
-    if (content) out.push(content);
+    if (content && out.length < 5) out.push(clean(content, 120));
   }
   return out;
 }
@@ -149,9 +203,10 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
 
   let list = BOTS;
   if (Array.isArray(onlyBots) && onlyBots.length) {
-    const want = new Set(onlyBots.map(b => String(b).toLowerCase()));
+    if (onlyBots.length > BOTS.length) throw new InputError('Too many bots requested.');
+    const want = new Set(onlyBots.map(b => String(b).toLowerCase().slice(0, 40)));
     list = BOTS.filter(b => want.has(b.id) || want.has(b.token.toLowerCase()));
-    if (!list.length) throw new InputError(`Unknown bots: ${onlyBots.join(', ')}. Known: ${BOTS.map(b => b.token).join(', ')}`);
+    if (!list.length) throw new InputError(`Unknown bots. Known: ${BOTS.map(b => b.token).join(', ')}`);
   }
 
   const robotsUrl = new URL('/robots.txt', origin);
@@ -174,15 +229,18 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
   const cfMatch = /#\s*BEGIN Cloudflare Managed content([\s\S]*?)#\s*END Cloudflare Managed Content/i.exec(robotsText);
   const cfManaged = cfMatch ? cfMatch[1] : null;
   const ownRobots = cfMatch ? robotsText.replace(cfMatch[0], '') : robotsText;
+  const parsedAll = parseRobots(robotsText);
+  const parsedOwn = cfMatch ? parseRobots(ownRobots) : null;
+  const parsedCf = cfMatch ? parseRobots(cfManaged) : null;
 
   const results = await Promise.all(
     list.map(async b => {
       let robots;
       if (robotsState === 'found') {
-        robots = checkRobots(robotsText, b.token, pathAndQuery);
+        robots = checkParsed(parsedAll, b.token, pathAndQuery);
         if (!robots.allowed && cfManaged !== null) {
-          const own = checkRobots(ownRobots, b.token, pathAndQuery);
-          const cf = checkRobots(cfManaged, b.token, pathAndQuery);
+          const own = checkParsed(parsedOwn, b.token, pathAndQuery);
+          const cf = checkParsed(parsedCf, b.token, pathAndQuery);
           // Block comes from Cloudflare when the site's own lines alone would allow the bot,
           // or when the group that blocked it is defined in the managed block.
           if (own.allowed || (!cf.allowed && cf.group && cf.group !== '*' && cf.group === robots.group)) {
@@ -198,7 +256,7 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
         bot: b.token,
         vendor: b.vendor,
         purpose: b.purpose,
-        robots: { allowed: robots.allowed, group: robots.group, rule: robots.rule, source: robots.source ?? null },
+        robots: { allowed: robots.allowed, group: clean(robots.group, 60), rule: robots.tooComplex ? 'robots.txt too complex to evaluate fully' : clean(robots.rule, 120), source: robots.source ?? null },
       };
       if (b.fetches === false) {
         row.server = { verdict: 'not_applicable', note: 'Control token only: it is set in robots.txt and never sent as a User-Agent.' };
@@ -207,7 +265,9 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
         const v = serverVerdict(p, base);
         row.server = { verdict: v.verdict, status: p.status, note: v.note, ms: p.ms };
       }
-      row.access = !robots.allowed
+      row.access = robots.tooComplex
+        ? 'inconclusive'
+        : !robots.allowed
         ? 'blocked_by_robots'
         : row.server.verdict === 'blocked'
           ? 'blocked_by_server'

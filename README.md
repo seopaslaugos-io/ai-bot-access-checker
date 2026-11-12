@@ -82,7 +82,19 @@ Copy `skills/ai-bot-access-check` into your agent's skills folder, or install it
 - robots.txt is parsed per [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309): most specific user-agent group, merged duplicate groups, longest match wins, Allow wins ties, `*` and `$` wildcards; a 4xx robots.txt means no restrictions, a 5xx means full disallow.
 - The page is requested once with a desktop Chrome User-Agent and once per bot with the bot's published User-Agent, from Cloudflare's network.
 - Requests do **not** come from the vendors' IP ranges. Blocks by User-Agent (most hosting firewalls) are caught; firewalls that verify crawler IPs are reported as `inconclusive` instead of guessed.
-- Rate limit 20 checks/minute per IP; results cached 10 minutes per URL.
+- Rate limits: 20 checks a minute per caller IP, and 6 fresh checks a minute per checked website from all callers together, so the checker cannot be used to flood a site. Results are cached 10 minutes per URL.
+
+## Security
+
+- Only public `http`/`https` URLs on ports 80/443 with a domain name are checked. IP literals (dotted, decimal, octal, hex, IPv6), `localhost` and reserved TLDs, wildcard-DNS hosts that point at private addresses (`nip.io`, `sslip.io`, ...), URLs with credentials and the checker's own hosts are refused.
+- Redirects are followed by hand (max 5) and every hop is validated the same way, so a public page cannot bounce the checker to an internal address, another port or its own API.
+- At most 64 KiB of each response is read; each request times out after 10 s.
+- robots.txt matching uses a linear wildcard matcher with a work budget and caps on lines, rules and pattern length, so a hostile robots.txt cannot stall the Worker; if the budget runs out the result says *inconclusive*.
+- Text taken from the checked site (robots.txt rules, URLs, headers) is stripped of control and bidi characters and length-capped before it is returned to people or AI agents.
+- MCP batches are capped at 10 messages and one `tools/call`; request bodies are capped at 16 KiB.
+- No keys, cookies or user data are stored. Results are cached by URL only.
+
+Found a problem? Open an issue or email seo@seopaslaugos.io.
 
 ## Run your own
 

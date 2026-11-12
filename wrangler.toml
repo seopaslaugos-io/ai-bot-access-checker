@@ -13,3 +13,14 @@ simple = { limit = 20, period = 60 }
 
 [observability]
 enabled = true
+
+
+# Exact per-checked-host limit (6 fresh checks a minute, all callers together), so the
+# checker cannot be used to flood one site. Cached results do not count.
+[[durable_objects.bindings]]
+name = "HOST_LIMIT"
+class_name = "HostLimit"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HostLimit"]

@@ -1,8 +1,11 @@
-import { runCheck, toText, InputError } from './check.js';
+import { runCheck, toText, InputError, normaliseUrl } from './check.js';
 import { BOTS } from './bots.js';
 import { openapi } from './openapi.js';
+export { HostLimit } from './hostlimit.js';
 
-const VERSION = '1.1.0';
+const TARGET_LIMIT = 6; // fresh checks per checked host per minute, all callers together
+
+const VERSION = '1.2.0';
 const DOCS = 'https://seopaslaugos.io/en/tools/ai-bot-access-checker';
 const CACHE_SECONDS = 600;
 
@@ -13,29 +16,62 @@ const CORS = {
   'Access-Control-Expose-Headers': 'Mcp-Session-Id',
 };
 
+const SECURITY = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+  'Cache-Control': 'no-store',
+};
+const MAX_BODY_BYTES = 16 * 1024;
+
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS, ...extra },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS, ...SECURITY, ...extra },
   });
 }
 
-async function limited(env, request) {
-  if (!env.LIMITER) return false;
+class LimitError extends Error {}
+
+// Per caller IP: 20 checks a minute (wrangler.toml LIMITER).
+async function limitCaller(env, request) {
+  if (!env.LIMITER) return;
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const { success } = await env.LIMITER.limit({ key: ip });
-  return !success;
+  if (!success) throw new LimitError('Too many checks from your IP. Wait a minute and try again.');
 }
 
-// Cached wrapper so repeated checks of one URL do not hammer the target site.
-async function cachedCheck(url, bots, ctx) {
+// Per checked site: a few fresh checks a minute no matter how many callers or IPs ask, so
+// the checker cannot be used to flood one website (each check sends ~14 requests to it).
+async function limitTarget(env, host) {
+  if (!env.HOST_LIMIT) return;
+  const stub = env.HOST_LIMIT.get(env.HOST_LIMIT.idFromName(host));
+  const r = await stub.take(TARGET_LIMIT, 60000);
+  if (!r.ok) throw new LimitError(`${host} was checked ${TARGET_LIMIT} times in the last minute. Try again in ${r.retryAfter} s.`);
+}
+
+// Body reader with a hard size cap (requests are tiny; anything big is abuse).
+async function readJson(request) {
+  const len = Number(request.headers.get('content-length') || 0);
+  if (len > MAX_BODY_BYTES) throw new InputError('Request body is too large.');
+  const text = await request.text();
+  if (text.length > MAX_BODY_BYTES) throw new InputError('Request body is too large.');
+  return JSON.parse(text);
+}
+
+// Validates first, then serves from cache, and only on a miss spends the per-site budget.
+// The cache key is the normalised URL so trivial spelling variants share one entry.
+async function cachedCheck(rawUrl, bots, env, ctx) {
+  const url = normaliseUrl(rawUrl);
+  const botKey = (bots || []).map(b => String(b).toLowerCase().slice(0, 40)).sort().join(',');
   const key = new Request(
-    'https://cache.internal/' + VERSION + '/v1/check?' + new URLSearchParams({ url, bots: (bots || []).join(',') }).toString(),
+    'https://cache.internal/' + VERSION + '/v1/check?' + new URLSearchParams({ url: url.toString(), bots: botKey }).toString(),
   );
   const cache = caches.default;
   const hit = await cache.match(key);
   if (hit) return hit.json();
-  const result = await runCheck(url, { bots });
+  await limitTarget(env, url.hostname.toLowerCase());
+  const result = await runCheck(url.toString(), { bots });
   ctx.waitUntil(
     cache.put(key, new Response(JSON.stringify(result), { headers: { 'Cache-Control': `max-age=${CACHE_SECONDS}` } })),
   );
@@ -44,30 +80,42 @@ async function cachedCheck(url, bots, ctx) {
 
 function parseBots(v) {
   if (!v) return undefined;
-  if (Array.isArray(v)) return v;
-  return String(v).split(',').map(s => s.trim()).filter(Boolean);
+  if (Array.isArray(v)) return v.slice(0, 20).map(String);
+  return String(v).slice(0, 400).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function errorResponse(e) {
+  if (e instanceof InputError) return json({ error: e.message }, 400);
+  if (e instanceof LimitError) return json({ error: e.message }, 429, { 'Retry-After': '60' });
+  console.error('check failed', e);
+  return json({ error: 'Check failed. Try again in a minute.' }, 500);
 }
 
 /* ---------------- REST ---------------- */
 
 async function handleCheck(request, env, ctx) {
-  let url, bots, format;
-  if (request.method === 'POST') {
-    let body;
-    try { body = await request.json(); } catch { return json({ error: 'Body must be JSON: {"url": "https://example.com/"}' }, 400); }
-    url = body.url; bots = parseBots(body.bots); format = body.format;
-  } else {
-    const q = new URL(request.url).searchParams;
-    url = q.get('url'); bots = parseBots(q.get('bots')); format = q.get('format');
-  }
-  if (await limited(env, request)) return json({ error: 'Too many checks from your IP. Wait a minute and try again.' }, 429);
   try {
-    const result = await cachedCheck(url, bots, ctx);
-    if (format === 'text') return new Response(toText(result), { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS } });
+    let url, bots, format;
+    if (request.method === 'POST') {
+      let body;
+      try { body = await readJson(request); } catch (e) {
+        if (e instanceof InputError) throw e;
+        throw new InputError('Body must be JSON: {"url": "https://example.com/"}');
+      }
+      if (!body || typeof body !== 'object') throw new InputError('Body must be a JSON object.');
+      url = body.url; bots = parseBots(body.bots); format = body.format;
+    } else if (request.method === 'GET') {
+      const q = new URL(request.url).searchParams;
+      url = q.get('url'); bots = parseBots(q.get('bots')); format = q.get('format');
+    } else {
+      return json({ error: 'Use GET or POST.' }, 405, { Allow: 'GET, POST' });
+    }
+    await limitCaller(env, request);
+    const result = await cachedCheck(url, bots, env, ctx);
+    if (format === 'text') return new Response(toText(result), { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS, ...SECURITY } });
     return json(result);
   } catch (e) {
-    if (e instanceof InputError) return json({ error: e.message }, 400);
-    return json({ error: 'Check failed', detail: String(e?.message || e) }, 500);
+    return errorResponse(e);
   }
 }
 
@@ -103,7 +151,8 @@ const INSTRUCTIONS =
   'One tool: check_ai_bot_access(url). It tells which AI and search crawlers can reach a page and, when one cannot, ' +
   'whether robots.txt or the server/firewall blocks it. Built by Mantas Tamošaitis, SEO specialist in Lithuania (seopaslaugos.io).';
 
-async function rpc(msg, env, ctx) {
+async function rpc(msg, env, ctx, request) {
+  if (!msg || typeof msg !== 'object') return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid request' } };
   const { id, method, params } = msg;
   const ok = result => ({ jsonrpc: '2.0', id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
@@ -124,13 +173,15 @@ async function rpc(msg, env, ctx) {
     case 'tools/list':
       return ok({ tools: [TOOL] });
     case 'tools/call': {
-      if (params?.name !== TOOL.name) return err(-32602, `Unknown tool: ${params?.name}`);
-      const a = params.arguments || {};
+      if (params?.name !== TOOL.name) return err(-32602, 'Unknown tool');
+      const a = (params && typeof params.arguments === 'object' && params.arguments) || {};
       try {
-        const r = await cachedCheck(a.url, parseBots(a.bots), ctx);
+        await limitCaller(env, request);
+        const r = await cachedCheck(a.url, parseBots(a.bots), env, ctx);
         return ok({ content: [{ type: 'text', text: toText(r) }], structuredContent: r, isError: false });
       } catch (e) {
-        const message = e instanceof InputError ? e.message : `Check failed: ${e?.message || e}`;
+        const message = e instanceof InputError || e instanceof LimitError ? e.message : 'Check failed. Try again in a minute.';
+        if (!(e instanceof InputError || e instanceof LimitError)) console.error('mcp check failed', e);
         return ok({ content: [{ type: 'text', text: message }], isError: true });
       }
     }
@@ -150,19 +201,23 @@ async function handleMcp(request, env, ctx) {
       status: 405, headers: { Allow: 'POST', ...CORS },
     });
   }
-  if (request.method === 'DELETE') return new Response(null, { status: 204, headers: CORS });
+  if (request.method === 'DELETE') return new Response(null, { status: 204, headers: { ...CORS, ...SECURITY } });
   if (request.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST', ...CORS } });
 
   let body;
-  try { body = await request.json(); } catch {
+  try { body = await readJson(request); } catch {
     return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
   }
   const calls = Array.isArray(body) ? body : [body];
-  if (calls.some(c => c?.method === 'tools/call') && (await limited(env, request))) {
-    return json({ jsonrpc: '2.0', id: calls[0]?.id ?? null, error: { code: -32000, message: 'Too many checks from your IP. Wait a minute.' } }, 429);
+  // Batches are capped and may hold at most one check, so a batch cannot bypass the rate limit.
+  if (calls.length === 0 || calls.length > 10) {
+    return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Send 1 to 10 messages per request.' } }, 400);
   }
-  const out = (await Promise.all(calls.map(c => rpc(c, env, ctx)))).filter(Boolean);
-  if (!out.length) return new Response(null, { status: 202, headers: CORS });
+  if (calls.filter(c => c?.method === 'tools/call').length > 1) {
+    return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'One tools/call per request.' } }, 400);
+  }
+  const out = (await Promise.all(calls.map(c => rpc(c, env, ctx, request)))).filter(Boolean);
+  if (!out.length) return new Response(null, { status: 202, headers: { ...CORS, ...SECURITY } });
   return json(Array.isArray(body) ? out : out[0]);
 }
 
@@ -180,6 +235,17 @@ Built by Mantas Tamošaitis, SEO specialist in Lithuania, <a href="https://seopa
 
 export default {
   async fetch(request, env, ctx) {
+    try {
+      return await route(request, env, ctx);
+    } catch (e) {
+      console.error('unhandled', e);
+      return json({ error: 'Internal error' }, 500);
+    }
+  },
+};
+
+async function route(request, env, ctx) {
+  {
     const { pathname } = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     if (pathname === '/mcp' || pathname === '/mcp/') return handleMcp(request, env, ctx);
@@ -188,7 +254,7 @@ export default {
     if (pathname === '/openapi.json') return json(openapi(VERSION));
     if (pathname === '/health') return json({ ok: true, version: VERSION });
     if (pathname === '/robots.txt') return new Response('User-agent: *\nAllow: /\n', { headers: { 'Content-Type': 'text/plain' } });
-    if (pathname === '/') return new Response(HOME, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    if (pathname === '/') return new Response(HOME, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY, 'Cache-Control': 'public, max-age=3600', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" } });
     return json({ error: 'Not found', docs: DOCS }, 404);
-  },
-};
+  }
+}

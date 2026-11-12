@@ -1,6 +1,6 @@
 {
   "name": "ai-bot-access-checker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Check whether GPTBot, ClaudeBot, PerplexityBot, Googlebot and 9 more AI and search crawlers can reach a page: robots.txt rules plus server and firewall blocks.",
   "author": { "name": "Mantas Tamošaitis", "url": "https://seopaslaugos.io/en" },
   "homepage": "https://seopaslaugos.io/en/tools/ai-bot-access-checker",
