@@ -168,10 +168,29 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
     robotsState = 'unavailable'; // 5xx / network: crawlers treat the site as fully disallowed
   }
 
+  // Cloudflare's "Managed robots.txt" setting prepends its own block (between
+  // "# BEGIN Cloudflare Managed content" and "# END Cloudflare Managed Content") even when
+  // the site has no robots.txt of its own. Tell the user when a block comes from there.
+  const cfMatch = /#\s*BEGIN Cloudflare Managed content([\s\S]*?)#\s*END Cloudflare Managed Content/i.exec(robotsText);
+  const cfManaged = cfMatch ? cfMatch[1] : null;
+  const ownRobots = cfMatch ? robotsText.replace(cfMatch[0], '') : robotsText;
+
   const results = await Promise.all(
     list.map(async b => {
       let robots;
-      if (robotsState === 'found') robots = checkRobots(robotsText, b.token, pathAndQuery);
+      if (robotsState === 'found') {
+        robots = checkRobots(robotsText, b.token, pathAndQuery);
+        if (!robots.allowed && cfManaged !== null) {
+          const own = checkRobots(ownRobots, b.token, pathAndQuery);
+          const cf = checkRobots(cfManaged, b.token, pathAndQuery);
+          // Block comes from Cloudflare when the site's own lines alone would allow the bot,
+          // or when the group that blocked it is defined in the managed block.
+          if (own.allowed || (!cf.allowed && cf.group && cf.group !== '*' && cf.group === robots.group)) {
+            robots.source = 'cloudflare_managed';
+          }
+        }
+        if (!robots.source) robots.source = robots.allowed ? null : 'site';
+      }
       else if (robotsState === 'missing') robots = { group: null, allowed: true, rule: null };
       else robots = { group: null, allowed: false, rule: 'robots.txt unreachable: crawlers assume everything is disallowed' };
 
@@ -179,7 +198,7 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
         bot: b.token,
         vendor: b.vendor,
         purpose: b.purpose,
-        robots: { allowed: robots.allowed, group: robots.group, rule: robots.rule },
+        robots: { allowed: robots.allowed, group: robots.group, rule: robots.rule, source: robots.source ?? null },
       };
       if (b.fetches === false) {
         row.server = { verdict: 'not_applicable', note: 'Control token only: it is set in robots.txt and never sent as a User-Agent.' };
@@ -234,7 +253,13 @@ export async function runCheck(input, { bots: onlyBots } = {}) {
       xRobotsTag: xrt || null,
       noindex,
     },
-    robotsTxt: { url: robotsUrl.toString(), state: robotsState, status: robotsRes.status },
+    robotsTxt: {
+      url: robotsUrl.toString(),
+      state: robotsState,
+      status: robotsRes.status,
+      cloudflareManaged: cfManaged !== null,
+      ownRules: cfManaged !== null ? /^\s*user-agent\s*:/im.test(ownRobots) : robotsState === 'found',
+    },
     summary: counts,
     bots: results,
     limits:
@@ -259,10 +284,16 @@ export function toText(r) {
   lines.push(`AI bot access for ${r.url}`);
   lines.push(`Browser baseline: ${r.baseline.status ? 'HTTP ' + r.baseline.status : r.baseline.error}${r.baseline.noindex ? ' (page is noindex)' : ''}`);
   lines.push(`robots.txt: ${r.robotsTxt.state} (HTTP ${r.robotsTxt.status || 'none'})`);
+  if (r.robotsTxt.cloudflareManaged) {
+    lines.push(
+      `  Cloudflare "Managed robots.txt" is on: Cloudflare adds its own AI-bot rules to this file${r.robotsTxt.ownRules ? '' : ' (the site has no rules of its own)'}. ` +
+      'Turn it off or edit it in Cloudflare > AI Crawl Control / Security > Bots, not in the site files.',
+    );
+  }
   lines.push('');
   for (const b of r.bots) {
     let why = '';
-    if (b.access === 'blocked_by_robots') why = ` - ${b.robots.rule}${b.robots.group ? ` (group "${b.robots.group}")` : ''}`;
+    if (b.access === 'blocked_by_robots') why = ` - ${b.robots.rule}${b.robots.group ? ` (group "${b.robots.group}")` : ''}${b.robots.source === 'cloudflare_managed' ? ' [added by Cloudflare]' : ''}`;
     else if (b.access === 'inconclusive') why = ` - HTTP ${b.server.status}`;
     else if (b.server.verdict !== 'ok' && b.server.verdict !== 'not_applicable') why = ` - ${b.server.note}`;
     lines.push(`${b.bot.padEnd(18)} ${label[b.access] || b.access}${why}`);

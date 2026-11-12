@@ -1,6 +1,6 @@
 {
   "name": "ai-bot-access-checker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Check whether GPTBot, ClaudeBot, PerplexityBot, Googlebot and other AI crawlers can reach a page: robots.txt rules plus server and firewall blocks. REST API and remote MCP server on Cloudflare Workers.",
   "type": "module",
   "private": true,

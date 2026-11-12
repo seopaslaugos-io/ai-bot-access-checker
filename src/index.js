@@ -2,7 +2,7 @@ import { runCheck, toText, InputError } from './check.js';
 import { BOTS } from './bots.js';
 import { openapi } from './openapi.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const DOCS = 'https://seopaslaugos.io/en/tools/ai-bot-access-checker';
 const CACHE_SECONDS = 600;
 
@@ -30,7 +30,7 @@ async function limited(env, request) {
 // Cached wrapper so repeated checks of one URL do not hammer the target site.
 async function cachedCheck(url, bots, ctx) {
   const key = new Request(
-    'https://cache.internal/v1/check?' + new URLSearchParams({ url, bots: (bots || []).join(',') }).toString(),
+    'https://cache.internal/' + VERSION + '/v1/check?' + new URLSearchParams({ url, bots: (bots || []).join(',') }).toString(),
   );
   const cache = caches.default;
   const hit = await cache.match(key);

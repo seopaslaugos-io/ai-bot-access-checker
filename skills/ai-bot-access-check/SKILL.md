@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: Mantas Tamošaitis
   homepage: https://seopaslaugos.io/en/tools/ai-bot-access-checker
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # AI bot access check
