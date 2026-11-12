@@ -1,0 +1,10 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.seopaslaugos/ai-bot-access-checker",
+  "title": "AI Bot Access Checker",
+  "description": "Checks if GPTBot, ClaudeBot, PerplexityBot, Googlebot and 9 more AI crawlers can reach a page.",
+  "version": "1.3.0",
+  "websiteUrl": "https://seopaslaugos.io/en/tools/ai-bot-access-checker",
+  "repository": { "url": "https://github.com/seopaslaugos-io/ai-bot-access-checker", "source": "github" },
+  "remotes": [ { "type": "streamable-http", "url": "https://tools.seopaslaugos.io/mcp" } ]
+}
