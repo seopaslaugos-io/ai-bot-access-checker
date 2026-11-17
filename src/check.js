@@ -343,6 +343,7 @@ export function toText(r) {
   };
   const lines = [];
   lines.push(`AI bot access for ${r.url}`);
+  lines.push(`Checked at ${r.checkedAt}${r.cached ? ' (saved result, up to 10 min old; add fresh=1 to re-check)' : ''}`);
   lines.push(`Browser baseline: ${r.baseline.status ? 'HTTP ' + r.baseline.status : r.baseline.error}${r.baseline.noindex ? ' (page is noindex)' : ''}`);
   lines.push(`robots.txt: ${r.robotsTxt.state} (HTTP ${r.robotsTxt.status || 'none'})`);
   if (r.robotsTxt.cloudflareManaged) {

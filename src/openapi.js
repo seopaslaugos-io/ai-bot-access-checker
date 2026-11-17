@@ -52,6 +52,7 @@ export function openapi(version) {
             { name: 'url', in: 'query', required: true, schema: { type: 'string' }, example: 'https://example.com/' },
             { name: 'bots', in: 'query', required: false, schema: { type: 'string' }, description: 'Comma-separated subset, e.g. GPTBot,ClaudeBot' },
             { name: 'format', in: 'query', required: false, schema: { type: 'string', enum: ['json', 'text'] } },
+            { name: 'fresh', in: 'query', required: false, schema: { type: 'string', enum: ['1'] }, description: 'Skip the 10-minute result cache, e.g. right after changing a firewall rule. Still limited per checked site.' },
           ],
           responses: {
             200: {
@@ -62,7 +63,8 @@ export function openapi(version) {
                     type: 'object',
                     properties: {
                       url: { type: 'string' },
-                      checkedAt: { type: 'string', format: 'date-time' },
+                      checkedAt: { type: 'string', format: 'date-time', description: 'When the site was fetched' },
+                      cached: { type: 'boolean', description: 'true when this result is reused from the last 10 minutes (see checkedAt); add fresh=1 to re-check' },
                       baseline: { type: 'object', description: 'Same page fetched with a desktop Chrome User-Agent' },
                       robotsTxt: { type: 'object', properties: { url: { type: 'string' }, state: { type: 'string', enum: ['found', 'missing', 'unavailable'] }, status: { type: 'integer' } } },
                       summary: { type: 'object', additionalProperties: { type: 'integer' } },

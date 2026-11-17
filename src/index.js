@@ -5,7 +5,7 @@ export { HostLimit } from './hostlimit.js';
 
 const TARGET_LIMIT = 6; // fresh checks per checked host per minute, all callers together
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const DOCS = 'https://seopaslaugos.io/en/tools/ai-bot-access-checker';
 const CACHE_SECONDS = 600;
 
@@ -61,21 +61,25 @@ async function readJson(request) {
 
 // Validates first, then serves from cache, and only on a miss spends the per-site budget.
 // The cache key is the normalised URL so trivial spelling variants share one entry.
-async function cachedCheck(rawUrl, bots, env, ctx) {
+// fresh=true skips the cache read (still limited per site), for re-checking right after a fix.
+// Every result says whether it came from the cache; checkedAt is when the site was fetched.
+async function cachedCheck(rawUrl, bots, env, ctx, fresh = false) {
   const url = normaliseUrl(rawUrl);
   const botKey = (bots || []).map(b => String(b).toLowerCase().slice(0, 40)).sort().join(',');
   const key = new Request(
     'https://cache.internal/' + VERSION + '/v1/check?' + new URLSearchParams({ url: url.toString(), bots: botKey }).toString(),
   );
   const cache = caches.default;
-  const hit = await cache.match(key);
-  if (hit) return hit.json();
+  if (!fresh) {
+    const hit = await cache.match(key);
+    if (hit) return { ...(await hit.json()), cached: true };
+  }
   await limitTarget(env, url.hostname.toLowerCase());
   const result = await runCheck(url.toString(), { bots });
   ctx.waitUntil(
     cache.put(key, new Response(JSON.stringify(result), { headers: { 'Cache-Control': `max-age=${CACHE_SECONDS}` } })),
   );
-  return result;
+  return { ...result, cached: false };
 }
 
 function parseBots(v) {
@@ -95,7 +99,7 @@ function errorResponse(e) {
 
 async function handleCheck(request, env, ctx) {
   try {
-    let url, bots, format;
+    let url, bots, format, fresh;
     if (request.method === 'POST') {
       let body;
       try { body = await readJson(request); } catch (e) {
@@ -103,15 +107,15 @@ async function handleCheck(request, env, ctx) {
         throw new InputError('Body must be JSON: {"url": "https://example.com/"}');
       }
       if (!body || typeof body !== 'object') throw new InputError('Body must be a JSON object.');
-      url = body.url; bots = parseBots(body.bots); format = body.format;
+      url = body.url; bots = parseBots(body.bots); format = body.format; fresh = body.fresh === true || body.fresh === 1 || body.fresh === '1';
     } else if (request.method === 'GET') {
       const q = new URL(request.url).searchParams;
-      url = q.get('url'); bots = parseBots(q.get('bots')); format = q.get('format');
+      url = q.get('url'); bots = parseBots(q.get('bots')); format = q.get('format'); fresh = ['1', 'true'].includes(q.get('fresh'));
     } else {
       return json({ error: 'Use GET or POST.' }, 405, { Allow: 'GET, POST' });
     }
     await limitCaller(env, request);
-    const result = await cachedCheck(url, bots, env, ctx);
+    const result = await cachedCheck(url, bots, env, ctx, fresh);
     if (format === 'text') return new Response(toText(result), { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS, ...SECURITY } });
     return json(result);
   } catch (e) {
