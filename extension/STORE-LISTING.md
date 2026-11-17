@@ -74,7 +74,7 @@ Data-usage checkboxes (Chrome):
 - **Web history**: tick it (conservative reading: the URL of the checked page leaves the device). The other categories (personally identifiable info, health, financial, authentication, personal communications, location, user activity, website content) are **not** collected.
 - Certify all three: not sold or transferred to third parties outside the approved use; not used for purposes unrelated to the single purpose; not used to determine creditworthiness or for lending.
 
-Privacy policy URL: **required** once a data category is ticked. seopaslaugos.io has no privacy page yet; publish one (e.g. `https://seopaslaugos.io/en/privacy` or a `#privacy` section on the tool page) before submitting. Draft text:
+Privacy policy URL: **required** once a data category is ticked. Use https://github.com/seopaslaugos-io/ai-bot-access-checker/blob/main/PRIVACY.md (published 2026-11-17). Short version:
 
 > **AI Bot Access Checker: privacy.** The browser extension, CLI and API send only the address of the page you ask to check to tools.seopaslaugos.io, which requests that page and its robots.txt as a browser and as each AI crawler and returns the result. Results are cached for 10 minutes by URL so repeated checks do not hit the site again. Your IP address is used only for rate limiting and is not stored with results. No accounts, cookies, analytics or tracking. Contact: seo@seopaslaugos.io.
 
