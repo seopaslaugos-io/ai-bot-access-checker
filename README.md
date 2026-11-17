@@ -78,17 +78,17 @@ Copy `skills/ai-bot-access-check` into your agent's skills folder, or install it
 
 [`extension/`](extension/) is a Manifest V3 extension for Chrome and Microsoft Edge (one package for both). Click the icon on any page and press Check: it shows the browser baseline, the robots.txt state and one row per bot (Allowed, Blocked by robots.txt, Blocked by server/firewall, Inconclusive), grouped into search, user-triggered and training crawlers. Permissions: `activeTab` and the API host only; no content scripts, no storage, no analytics.
 
-Chrome Web Store and Edge Add-ons listings are coming. Until then, load it unpacked: `chrome://extensions` (or `edge://extensions`) > Developer mode > Load unpacked > pick the `extension` folder. `extension/build.sh` builds the store zip.
+Submitted to the Chrome Web Store (in review); Edge Add-ons is next. Until the listings are live, load it unpacked: `chrome://extensions` (or `edge://extensions`) > Developer mode > Load unpacked > pick the `extension` folder. `extension/build.sh` builds the store zip.
 
 ### CLI (npm)
 
 [`cli/`](cli/) is a zero-dependency Node CLI (Node 18+) with CI-friendly exit codes: 0 when no bot is blocked, 1 when one is, 2 on errors.
 
-```bash
-node cli/bin/ai-bot-access-checker.js https://example.com/ --bots OAI-SearchBot,Claude-SearchBot,PerplexityBot,Googlebot
-```
+Published on npm as [`ai-bot-access-checker`](https://www.npmjs.com/package/ai-bot-access-checker):
 
-The npm package `ai-bot-access-checker` (`npx ai-bot-access-checker <url>`) is coming; it is not published yet.
+```bash
+npx ai-bot-access-checker https://example.com/ --bots OAI-SearchBot,Claude-SearchBot,PerplexityBot,Googlebot
+```
 
 ## Results
 
