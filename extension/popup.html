@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://tools.seopaslaugos.io">
+  <title>AI Bot Access Checker</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icons/icon-32.png" width="24" height="24" alt="">
+    <h1>AI Bot Access Checker</h1>
+  </header>
+
+  <main>
+    <div class="target">
+      <p id="url" class="url" aria-label="Page to check">…</p>
+      <button id="check" type="button" disabled>Check</button>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <div id="result"></div>
+  </main>
+
+  <footer class="foot">
+    <a id="report" href="https://seopaslaugos.io/en/tools/ai-bot-access-checker" target="_blank" rel="noopener">Full report →</a>
+    <a class="by" href="https://seopaslaugos.io/en" target="_blank" rel="noopener">by seopaslaugos.io</a>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
