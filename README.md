@@ -74,6 +74,22 @@ The package is an [Agent Plugins](https://agent-plugins.org) v1 bundle: `plugin.
 
 Copy `skills/ai-bot-access-check` into your agent's skills folder, or install it from ClawHub. The skill calls the REST API with curl, so it needs no MCP support.
 
+### Browser extension
+
+[`extension/`](extension/) is a Manifest V3 extension for Chrome and Microsoft Edge (one package for both). Click the icon on any page and press Check: it shows the browser baseline, the robots.txt state and one row per bot (Allowed, Blocked by robots.txt, Blocked by server/firewall, Inconclusive), grouped into search, user-triggered and training crawlers. Permissions: `activeTab` and the API host only; no content scripts, no storage, no analytics.
+
+Chrome Web Store and Edge Add-ons listings are coming. Until then, load it unpacked: `chrome://extensions` (or `edge://extensions`) > Developer mode > Load unpacked > pick the `extension` folder. `extension/build.sh` builds the store zip.
+
+### CLI (npm)
+
+[`cli/`](cli/) is a zero-dependency Node CLI (Node 18+) with CI-friendly exit codes: 0 when no bot is blocked, 1 when one is, 2 on errors.
+
+```bash
+node cli/bin/ai-bot-access-checker.js https://example.com/ --bots OAI-SearchBot,Claude-SearchBot,PerplexityBot,Googlebot
+```
+
+The npm package `ai-bot-access-checker` (`npx ai-bot-access-checker <url>`) is coming; it is not published yet.
+
 ## Results
 
 | `access` | Meaning |

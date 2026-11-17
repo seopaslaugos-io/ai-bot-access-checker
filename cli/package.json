@@ -1,0 +1,42 @@
+{
+  "name": "ai-bot-access-checker",
+  "version": "1.0.0",
+  "description": "Check if GPTBot, ClaudeBot, PerplexityBot, Googlebot and 9 more AI crawlers can reach a URL: robots.txt rules plus server and firewall blocks. Zero dependencies, CI-friendly exit codes.",
+  "type": "module",
+  "bin": {
+    "ai-bot-access-checker": "bin/ai-bot-access-checker.js",
+    "ai-bot-check": "bin/ai-bot-access-checker.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai crawler",
+    "robots.txt",
+    "gptbot",
+    "claudebot",
+    "perplexitybot",
+    "seo",
+    "geo",
+    "llm",
+    "googlebot",
+    "ai seo",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Mantas Tamošaitis (https://seopaslaugos.io/en)",
+  "homepage": "https://seopaslaugos.io/en/tools/ai-bot-access-checker",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seopaslaugos-io/ai-bot-access-checker.git",
+    "directory": "cli"
+  },
+  "bugs": {
+    "url": "https://github.com/seopaslaugos-io/ai-bot-access-checker/issues"
+  }
+}
