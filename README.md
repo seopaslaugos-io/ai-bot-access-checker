@@ -78,7 +78,7 @@ Copy `skills/ai-bot-access-check` into your agent's skills folder, or install it
 
 [`extension/`](extension/) is a Manifest V3 extension for Chrome and Microsoft Edge (one package for both). Click the icon on any page and press Check: it shows the browser baseline, the robots.txt state and one row per bot (Allowed, Blocked by robots.txt, Blocked by server/firewall, Inconclusive), grouped into search, user-triggered and training crawlers. Permissions: `activeTab` and the API host only; no content scripts, no storage, no analytics.
 
-Submitted to the Chrome Web Store (in review); Edge Add-ons is next. Until the listings are live, load it unpacked: `chrome://extensions` (or `edge://extensions`) > Developer mode > Load unpacked > pick the `extension` folder. `extension/build.sh` builds the store zip.
+Install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/ai-bot-access-checker/gmpmncffipbjebjkoanobadlbamiodgj) (it also installs in Microsoft Edge from there). An Edge Add-ons listing is in progress. To load it unpacked instead: `chrome://extensions` (or `edge://extensions`) > Developer mode > Load unpacked > pick the `extension` folder. `extension/build.sh` builds the store zip.
 
 ### CLI (npm)
 
